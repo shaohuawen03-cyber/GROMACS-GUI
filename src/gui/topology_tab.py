@@ -171,19 +171,35 @@ class TopologyTab(QWidget):
         water = self.water_combo.currentText()
         ignh = self.ignh_check.isChecked()
 
-        # 重要修复：
-        # 我们**故意不传 -ff** 参数。
-        # 之前传 -ff oplsaa 时，如果 GROMACS 在多个地方找到 oplsaa.ff，就会报：
-        # "Force field 'oplsaa' occurs in 2 places"
-        #
-        # 现在依赖 GMXLIB（在 runner 初始化时已设置）来自动找到力场。
-        # 用户在界面上选的力场目前仅作参考，不影响命令。
+        # 修复：不传 -ff 参数（避免 "occurs in 2 places" 错误）
+        # 而是通过 stdin 自动选择力场编号
         args = ["pdb2gmx", "-f", pdb_filename, "-o", "processed.gro", "-p", "topol.top", "-water", water]
         if ignh:
             args.append("-ignh")
 
-        # 使用异步 Worker 执行
-        self.worker_pdb2gmx = self.runner.create_worker(args, cwd=self.cwd)
+        # 根据下拉框选择对应的编号（基于用户实际 GROMACS 安装列表）
+        ff = self.ff_combo.currentText()
+        ff_map = {
+            "amber03": "1",
+            "amber94": "2",
+            "amber96": "3",
+            "amber99": "4",
+            "amber99sb": "5",
+            "amber99sb-ildn": "6",
+            "amberGS": "7",
+            "charmm27": "8",
+            "gromos43a1": "9",
+            "gromos43a2": "10",
+            "gromos45a3": "11",
+            "gromos53a5": "12",
+            "gromos53a6": "13",
+            "gromos54a7": "14",
+            "oplsaa": "15",
+        }
+        selection = ff_map.get(ff, "15") + "\n"   # 默认 oplsaa
+
+        # 使用异步 Worker + stdin 自动选择力场
+        self.worker_pdb2gmx = self.runner.create_worker(args, cwd=self.cwd, input_text=selection)
         self.worker_pdb2gmx.output_signal.connect(self.main_window.log)
         self.worker_pdb2gmx.finished_signal.connect(self.on_pdb2gmx_finished)
         
