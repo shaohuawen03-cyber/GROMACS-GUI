@@ -204,16 +204,26 @@ class TopologyTab(QWidget):
         self.worker_pdb2gmx.finished_signal.connect(self.on_pdb2gmx_finished)
         
         self.set_buttons_enabled(False)
+
+        # 清晰的开始标记 + 时间（支持 verbose）
+        if hasattr(self.main_window, 'log_step_start'):
+            self.main_window.log_step_start(f"pdb2gmx (力场: {ff})")
+        else:
+            self.main_window.log(f"\n>>> 开始 pdb2gmx (力场: {ff}) @ {__import__('datetime').datetime.now().strftime('%H:%M:%S')}")
+
         self.worker_pdb2gmx.start()
 
     def on_pdb2gmx_finished(self, success, message):
         self.set_buttons_enabled(True)
         if success:
-            self.main_window.log("✅ pdb2gmx 成功完成")
+            if hasattr(self.main_window, 'log_step_complete'):
+                self.main_window.log_step_complete("pdb2gmx")
+            else:
+                self.main_window.log("✅✅✅ pdb2gmx 成功完成")
             QMessageBox.information(self, "成功", "pdb2gmx 运行完成！生成了 processed.gro 和 topol.top")
         else:
             self.main_window.log("❌ pdb2gmx 失败")
-            self.main_window.log(message)   # 关键：把完整错误输出打印到全局日志
+            self.main_window.log(message)
             QMessageBox.critical(self, "错误", f"pdb2gmx 运行失败\n\n{message}")
 
     def run_editconf(self):
@@ -237,12 +247,17 @@ class TopologyTab(QWidget):
         self.worker_editconf.finished_signal.connect(self.on_editconf_finished)
         
         self.set_buttons_enabled(False)
+        if hasattr(self.main_window, 'log_step_start'):
+            self.main_window.log_step_start("editconf")
         self.worker_editconf.start()
 
     def on_editconf_finished(self, success, message):
         self.set_buttons_enabled(True)
         if success:
-            self.main_window.log("✅ editconf 成功")
+            if hasattr(self.main_window, 'log_step_complete'):
+                self.main_window.log_step_complete("editconf")
+            else:
+                self.main_window.log("✅✅✅ editconf 成功")
             QMessageBox.information(self, "成功", "editconf 运行完成！生成了 newbox.gro")
         else:
             self.main_window.log("❌ editconf 失败")
@@ -270,11 +285,17 @@ class TopologyTab(QWidget):
         self.worker_solvate.finished_signal.connect(self.on_solvate_finished)
         
         self.set_buttons_enabled(False)
+        if hasattr(self.main_window, 'log_step_start'):
+            self.main_window.log_step_start("solvate")
         self.worker_solvate.start()
 
     def on_solvate_finished(self, success, message):
         self.set_buttons_enabled(True)
         if success:
+            if hasattr(self.main_window, 'log_step_complete'):
+                self.main_window.log_step_complete("solvate")
+            else:
+                self.main_window.log("✅✅✅ solvate 完成")
             QMessageBox.information(self, "成功", "solvate 运行完成！生成了 solvated.gro")
         else:
             QMessageBox.critical(self, "错误", f"solvate 运行失败: {message}")
