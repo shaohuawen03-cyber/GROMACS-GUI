@@ -23,6 +23,13 @@ class GromacsWorker(QThread):
         self.output_signal.emit(f"    工作目录 (cwd): {cwd_str}")
         if self.input_text:
             self.output_signal.emit(f"    自动输入: {self.input_text.strip()}")
+
+        # 额外保险：再次确保 GMXDATA 被设置（防止 runner 初始化时没生效）
+        try:
+            from .config import setup_gmx_environment
+            setup_gmx_environment(self.gmx_path)
+        except:
+            pass
         
         full_output = []
         
