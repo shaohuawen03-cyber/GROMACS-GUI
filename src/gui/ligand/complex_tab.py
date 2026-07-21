@@ -106,6 +106,9 @@ class ComplexTab(QWidget):
         pdb_group.setLayout(pdb_layout)
         layout.addWidget(pdb_group)
 
+        # 初始建议一次
+        self._update_ff_suggestion(self.ff_combo.currentText())
+
         # 2. 构建复合物
         build_group = QGroupBox("2. 构建复合物")
         build_layout = QVBoxLayout()
@@ -215,6 +218,29 @@ class ComplexTab(QWidget):
         layout.addWidget(genion_group)
 
         layout.addStretch()
+
+    def _update_ff_suggestion(self, ff_name):
+        """根据选择的力场自动建议力场交互编号（可手动覆盖）。
+        请先在终端运行 `gmx pdb2gmx` 查看实际提示中的编号！
+        """
+        ff_suggestions = {
+            "amber03": "1",
+            "amber94": "2",
+            "amber96": "3",
+            "amber99": "4",
+            "amber99sb": "5",
+            "amber99sb-ildn": "6",
+            "charmm27": "8",
+            "oplsaa": "15",
+        }
+        suggested = ff_suggestions.get(ff_name, "15")
+        if self.ff_index_edit is not None:
+            self.ff_index_edit.setText(suggested)
+        if hasattr(self, 'main_window') and self.main_window:
+            try:
+                self.main_window.log(f"[建议] 力场 {ff_name} 推荐交互编号: {suggested} （请用终端 gmx pdb2gmx 确认真实编号！）")
+            except Exception:
+                pass
 
     def update_ligand_info(self, cwd, itp_path, gro_path):
         self.cwd = cwd
