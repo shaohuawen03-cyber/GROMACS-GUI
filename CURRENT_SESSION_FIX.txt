@@ -1,0 +1,58 @@
+================================================================================
+你现在在 (gmx) 环境 —— 请直接复制下面命令执行
+================================================================================
+
+【第一步】先验证核心功能（不打开界面，先证明代码没问题）
+复制下面整段粘贴执行：
+
+python -c "
+import sys
+sys.path.insert(0, 'src')
+from core.config import get_gmx_path
+from core.runner import GromacsRunner
+
+print('=== GROMACS 路径 ===')
+print(get_gmx_path())
+
+print('\n=== 测试 gmx -version ===')
+r = GromacsRunner()
+ok, out = r.run_command(['-version'])
+print('成功:', ok)
+print(out[:700])
+
+print('\n✅ 核心代码 + gmx 调用完全正常！')
+print('问题仅是 PyQt6 图形界面加载失败')
+"
+
+【第二步】尝试修复 PyQt6（当前窗口执行）
+pip uninstall PyQt6 PyQt6-Qt6 PyQt6-sip -y
+pip install PyQt6
+
+【第三步】测试 PyQt6 是否修复
+python -c "from PyQt6.QtCore import QCoreApplication; print('✅ PyQt6 加载成功！')"
+
+【第四步】如果上面成功，启动程序
+python src\main.py
+
+================================================================================
+如果第三步还是报 "DLL load failed"，必须做这一步：
+================================================================================
+
+1. 下载并安装 Microsoft Visual C++ 运行库（64位）：
+   https://aka.ms/vs/17/release/vc_redist.x64.exe
+
+2. 双击安装，一直点“下一步”。
+
+3. 安装完后 **关闭当前 PowerShell 窗口**。
+
+4. 重新打开 PowerShell，执行：
+   cd E:\1AI\GROMACS-GUI
+   .\gmx\Scripts\Activate.ps1
+   python src\main.py
+
+================================================================================
+以后最简单启动（已准备好）
+================================================================================
+双击项目里的 start_gmx.bat
+
+================================================================================
