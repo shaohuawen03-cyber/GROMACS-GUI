@@ -132,12 +132,17 @@ class MainWindow(QMainWindow):
 
         self.right_layout.addLayout(btn_layout)
 
-        # === 新增：一键运行完整流程 + Verbose 开关 ===
+        # === 新增：一键运行完整流程 + Verbose 开关 + 手动确认 ===
         controls_layout = QHBoxLayout()
 
         self.chk_verbose = QCheckBox("Verbose 模式 (显示详细进度 + 结束时间)")
         self.chk_verbose.setChecked(True)
         controls_layout.addWidget(self.chk_verbose)
+
+        self.chk_manual_test_passed = QCheckBox("已手动测试通过 (pdb2gmx / 复合物等)")
+        self.chk_manual_test_passed.setChecked(False)
+        self.chk_manual_test_passed.stateChanged.connect(self._update_run_all_button)
+        controls_layout.addWidget(self.chk_manual_test_passed)
 
         self.btn_run_all = QPushButton("🚀 一键运行完整流程 (Topology → EM → EQ → MD)")
         self.btn_run_all.setStyleSheet("background-color: #006400; color: white; font-weight: bold; padding: 8px;")
@@ -145,6 +150,13 @@ class MainWindow(QMainWindow):
         controls_layout.addWidget(self.btn_run_all)
 
         self.right_layout.addLayout(controls_layout)
+
+        # 提示
+        tip = QLabel("提示：先手动跑通 pdb2gmx（溶液或复合物），勾选确认框，一键流程会尝试继续后续步骤。")
+        tip.setStyleSheet("color: #888; font-size: 11px;")
+        self.right_layout.addWidget(tip)
+
+        self._update_run_all_button()
 
         # Pipeline state
         self.pipeline_running = False
@@ -263,46 +275,57 @@ class MainWindow(QMainWindow):
         print("[GUI] test_log_output 结束")
 
     def run_full_pipeline(self):
-        """一键运行完整流程（Topology → EM → EQ → MD）"""
+        """一键运行完整流程（仅在用户确认手动测试通过后才推荐使用）"""
         if not self.topology_tab or not self.em_tab or not self.eq_tab or not self.md_tab:
             QMessageBox.warning(self, "错误", "部分标签页未初始化")
             return
 
+        # 新增保护：必须勾选“已手动测试通过”
+        if not getattr(self, 'chk_manual_test_passed', None) or not self.chk_manual_test_passed.isChecked():
+            QMessageBox.warning(
+                self,
+                "请先手动测试",
+                "强烈建议：\n"
+                "1. 先手动跑通 pdb2gmx（溶液或复合物）\n"
+                "2. 确认生成 processed.gro / topol.top\n"
+                "3. 勾选上方「已手动测试通过」复选框\n\n"
+                "再点击一键流程。\n\n"
+                "当前版本的一键流程主要是方便后续阶段，完整自动链式仍在完善中。"
+            )
+            return
+
         reply = QMessageBox.question(
             self,
-            "确认一键运行",
-            "这将依次执行：\n1. Topology (pdb2gmx + editconf + solvate)\n2. Energy Minimization\n3. Equilibration (NVT + NPT)\n4. Production MD\n\n确认继续？",
+            "确认一键运行完整流程",
+            "这将尝试启动 Topology 阶段。\n"
+            "后续 EM / EQ / MD 需要你观察日志后手动或等待后续自动衔接。\n\n"
+            "确认继续？",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
         )
         if reply != QMessageBox.StandardButton.Yes:
             return
 
         self.log("\n" + "="*70)
-        self.log("🚀 开始一键完整流程")
+        self.log("🚀 开始一键完整流程（用户已确认手动测试通过）")
         self.log("="*70)
 
-        # 目前简单顺序触发（后续可以做成真正的链式回调）
-        # 这里我们直接触发 topology 的主要步骤
-        # 实际生产中应该监听 finished_signal 再继续下一步
-
         try:
-            # 步骤1: Topology（只触发 pdb2gmx，其余步骤用户可手动或我们后续扩展）
+            # 目前主要触发 solution 的 pdb2gmx（复合物用户可手动在 Ligand Simulator 里跑）
             if hasattr(self.topology_tab, 'run_pdb2gmx'):
-                self.log(">>> [1/4] 开始 Topology (pdb2gmx)")
+                self.log(">>> [1/4] 启动 Topology (pdb2gmx) ...")
                 self.topology_tab.run_pdb2gmx()
-                self.log_step_complete("Topology (pdb2gmx) 已启动")
 
-            # 提示用户
-            self.log("\n注意：当前版本会依次启动各阶段。")
-            self.log("请观察日志，等待当前阶段完成后手动或等待后续自动衔接。")
+            self.log("\n注意：")
+            self.log("• 控制台会显示大量 [GMX] 输出（正常）")
+            self.log("• GUI 日志在重度阶段会比较安静（我们故意设计的，防止卡死）")
+            self.log("• pdb2gmx 成功后请手动继续 editconf / solvate / EM 等，或等待后续改进的自动链式。")
 
-            # 简单版本：直接启动 EM（假设 topology 已经手动跑完）
-            # 实际建议后面做成真正的 pipeline 状态机
-
-            QMessageBox.information(self, "提示", 
-                "一键流程已启动 Topology 阶段。\n"
-                "请在日志中等待当前阶段完成。\n\n"
-                "完整自动流水线后续版本会进一步优化。")
+            QMessageBox.information(
+                self, "已启动",
+                "已触发 Topology (pdb2gmx)。\n"
+                "请在控制台观察输出，等待它自然结束。\n\n"
+                "后续阶段请根据日志手动执行或等待我们后续版本完善全自动流水线。"
+            )
 
         except Exception as e:
             self.log(f"❌ 一键流程启动失败: {str(e)}")

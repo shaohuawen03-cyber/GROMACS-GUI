@@ -2,7 +2,7 @@ from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout,
                              QPushButton, QLabel, QGroupBox, 
                              QFormLayout, QComboBox, QLineEdit, 
                              QMessageBox, QFileDialog, QCheckBox)
-from PyQt6.QtCore import pyqtSignal
+from PyQt6.QtCore import pyqtSignal, Qt
 import os
 import shutil
 
@@ -154,13 +154,22 @@ class ComplexTab(QWidget):
         water = self.water_combo.currentText()
         ignh = self.ignh_check.isChecked()
 
-        args = ["pdb2gmx", "-f", pdb_filename, "-o", "protein.gro", "-p", "topol.top", "-ff", ff, "-water", water]
+        # 关键修复：完全移除 -ff（避免 "occurs in 2 places"），通过 stdin 选择力场
+        args = ["pdb2gmx", "-f", pdb_filename, "-o", "protein.gro", "-p", "topol.top", "-water", water]
         if ignh:
             args.append("-ignh")
 
-        self.worker_pdb2gmx = self.runner.create_worker(args, cwd=self.cwd)
-        self.worker_pdb2gmx.output_signal.connect(self.main_window.log)
-        self.worker_pdb2gmx.finished_signal.connect(self.on_pdb2gmx_finished)
+        # 力场选择编号（与 solution tab 完全一致，15 = oplsaa）
+        ff_map = {
+            "amber03": "1", "amber94": "2", "amber96": "3", "amber99": "4",
+            "amber99sb": "5", "amber99sb-ildn": "6", "charmm27": "8",
+            "oplsaa": "15",
+        }
+        selection = ff_map.get(ff, "15") + "\n"
+
+        self.worker_pdb2gmx = self.runner.create_worker(args, cwd=self.cwd, input_text=selection)
+        self.worker_pdb2gmx.output_signal.connect(self.main_window.log, Qt.ConnectionType.QueuedConnection)
+        self.worker_pdb2gmx.finished_signal.connect(self.on_pdb2gmx_finished, Qt.ConnectionType.QueuedConnection)
         
         self.set_buttons_enabled(False)
         self.worker_pdb2gmx.start()

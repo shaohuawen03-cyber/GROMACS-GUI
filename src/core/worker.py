@@ -54,12 +54,18 @@ class GromacsWorker(QThread):
                 
             process = subprocess.Popen(**popen_args)
             
+            # 发送 stdin（力场选择等）
             if self.input_text:
                 try:
-                    process.stdin.write(self.input_text + "\n")
+                    data = self.input_text
+                    if not data.endswith('\n'):
+                        data += '\n'
+                    process.stdin.write(data)
+                    process.stdin.flush()
                     process.stdin.close()
-                except:
-                    pass
+                    print(f"[Worker] 已发送 stdin: {repr(self.input_text.strip())}")
+                except Exception as e:
+                    print(f"[Worker] stdin 发送失败: {e}")
 
             # === 终极沉默模式 ===
             # 控制台：100% 实时打印（你现在看到的几千行 [GMX] 就是证据）
