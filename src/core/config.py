@@ -2,47 +2,44 @@ import os
 import shutil
 import subprocess
 
-# =============================================
-# GROMACS-GUI 配置 - Windows 专用修复版
-# =============================================
-# 针对用户错误日志专门优化：
-# - 强制优先使用 E:\gmx2020.6_GPU\bin\gmx.exe （真实可执行文件）
-# - 自动设置 GMXDATA / GMXLIB 让 GROMACS 能找到 forcefield
-# - 避免捡到 gmx.EXE.exe / gmx.EXE 这类坏 launcher
-# =============================================
+# ============================================================
+# 强力修复版 GROMACS 路径检测
+# 专门解决 "No force fields found" 问题
+# ============================================================
 
 def get_gmx_path():
     """
-    返回一个能正常工作的 gmx 路径。
-    优先级：
-      1. 用户环境变量 GMX_PATH
-      2. 用户真实安装路径 E:\gmx2020.6_GPU\bin\gmx.exe
-      3. 其他常见位置
-      4. where / shutil 找到的干净 gmx.exe
+    强制返回正确的 gmx 可执行文件。
+    优先使用用户真实的安装路径 E:\gmx2020.6_GPU\bin\gmx.exe
+    这样才能正确找到 forcefield 数据。
     """
-    # 1. 环境变量最高优先
+    # 1. 用户明确设置的环境变量
     env = os.environ.get("GMX_PATH")
-    if env and os.path.isfile(env) and "gmx" in os.path.basename(env).lower():
-        # 排除明显坏的 launcher
-        if not os.path.basename(env).lower().endswith(".exe.exe"):
+    if env and os.path.isfile(env):
+        bn = os.path.basename(env).lower()
+        if "gmx" in bn and not bn.endswith(".exe.exe"):
             return os.path.abspath(env)
 
-    # 2. 用户实际安装位置（根据错误日志）
-    preferred = [
-        r"E:\gmx2020.6_GPU\bin\gmx.exe",
-        r"E:\gmx2020.6_GPU\bin\gmx.EXE",   # 有些安装是这个
+    # 2. 硬编码用户真实安装路径（根据错误日志，这是正确的）
+    #    优先使用干净的 gmx.exe
+    real_paths = [
+        r"E:\gmx2020.6_GPU\bin\gmx.exe",      # 最推荐
+        r"E:\gmx2020.6_GPU\bin\gmx.EXE",
         r"C:\gmx2020.6_GPU\bin\gmx.exe",
     ]
-    for p in preferred:
+    for p in real_paths:
         if os.path.isfile(p):
             return os.path.abspath(p)
 
-    # 3. 用 where 命令找（优先完整路径）
+    # 3. 用 where 命令找，严格过滤坏的 launcher
     for name in ["gmx.exe", "gmx"]:
         try:
-            res = subprocess.run(["where", name], capture_output=True, text=True, timeout=4, shell=True)
-            if res.returncode == 0:
-                for line in res.stdout.strip().splitlines():
+            result = subprocess.run(
+                ["where", name],
+                capture_output=True, text=True, timeout=5, shell=True
+            )
+            if result.returncode == 0:
+                for line in result.stdout.strip().splitlines():
                     p = line.strip()
                     if p and os.path.isfile(p):
                         bn = os.path.basename(p).lower()
@@ -51,7 +48,7 @@ def get_gmx_path():
         except:
             pass
 
-    # 4. shutil 兜底
+    # 4. shutil.which 兜底
     for name in ["gmx.exe", "gmx"]:
         p = shutil.which(name)
         if p and os.path.isfile(p):
@@ -59,13 +56,13 @@ def get_gmx_path():
             if "gmx" in bn and not bn.endswith(".exe.exe"):
                 return os.path.abspath(p)
 
-    # 最后回退（依赖 PATH）
+    # 5. 最后回退
     return "gmx"
 
 def setup_gmx_environment(gmx_path: str = None):
     """
-    根据 gmx.exe 的实际位置，设置 GMXDATA / GMXLIB
-    这样 pdb2gmx 才能找到 forcefield.itp
+    根据 gmx.exe 的真实位置，设置 GMXDATA / GMXLIB
+    让 pdb2gmx 能找到 amber03.ff / oplsaa.ff 等力场
     """
     if gmx_path is None:
         gmx_path = get_gmx_path()
@@ -76,11 +73,12 @@ def setup_gmx_environment(gmx_path: str = None):
     try:
         exe_dir = os.path.dirname(os.path.abspath(gmx_path))
 
-        # 常见布局：
-        # bin/gmx.exe  →  share/gromacs/top
+        # 典型安装结构：
+        # E:\gmx2020.6_GPU\bin\gmx.exe
+        # E:\gmx2020.6_GPU\share\gromacs\top\oplsaa.ff\forcefield.itp
         candidates = [
+            os.path.abspath(os.path.join(exe_dir, "..")),                    # bin 的上一级
             os.path.abspath(os.path.join(exe_dir, "..", "share", "gromacs")),
-            os.path.abspath(os.path.join(exe_dir, "..")),
             r"E:\gmx2020.6_GPU",
             r"C:\gmx2020.6_GPU",
         ]
@@ -88,7 +86,7 @@ def setup_gmx_environment(gmx_path: str = None):
         for root in candidates:
             top_dir = os.path.join(root, "share", "gromacs", "top")
             if os.path.isdir(top_dir):
-                # 确认里面有 .ff 目录
+                # 确认里面真的有 .ff 目录
                 try:
                     if any(d.endswith(".ff") for d in os.listdir(top_dir)):
                         os.environ["GMXDATA"] = root
@@ -97,7 +95,7 @@ def setup_gmx_environment(gmx_path: str = None):
                 except:
                     pass
 
-        # 兜底：直接硬编码用户常见位置
+        # 最后硬编码兜底（用户常见位置）
         for guess in [r"E:\gmx2020.6_GPU", r"C:\gmx2020.6_GPU"]:
             top = os.path.join(guess, "share", "gromacs", "top")
             if os.path.isdir(top):
