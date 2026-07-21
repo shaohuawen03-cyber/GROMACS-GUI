@@ -1,7 +1,8 @@
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, 
                              QPushButton, QLabel, QGroupBox, 
                              QFormLayout, QComboBox, QLineEdit, 
-                             QMessageBox, QFileDialog, QCheckBox)
+                             QMessageBox, QFileDialog, QCheckBox,
+                             QScrollArea, QSizePolicy)
 from PyQt6.QtCore import pyqtSignal, Qt
 import os
 import shutil
@@ -19,7 +20,38 @@ class ComplexTab(QWidget):
         self.init_ui()
 
     def init_ui(self):
-        layout = QVBoxLayout(self)
+        # === 彻底解决“挤在一起、无法拉伸、显示不开” ===
+        # 外层使用 QScrollArea，内部内容使用大间距
+        outer_layout = QVBoxLayout(self)
+        outer_layout.setContentsMargins(2, 2, 2, 2)
+        outer_layout.setSpacing(0)
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+        scroll.setStyleSheet("QScrollArea { border: none; }")
+
+        content_widget = QWidget()
+        layout = QVBoxLayout(content_widget)
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setSpacing(22)   # 非常大的组间距，避免拥挤
+
+        scroll.setWidget(content_widget)
+        outer_layout.addWidget(scroll)
+
+        # 强制让 tab 内容可以随主窗口拉伸 + 滚动
+        self.setMinimumWidth(540)
+        content_widget.setMinimumHeight(820)  # 足够内容高度，触发滚动
+        self.setSizePolicy(
+            QSizePolicy.Policy.Preferred,
+            QSizePolicy.Policy.Expanding
+        )
+        content_widget.setSizePolicy(
+            QSizePolicy.Policy.Preferred,
+            QSizePolicy.Policy.Expanding
+        )
 
         # 0. 状态信息
         self.status_label = QLabel("等待配体拓扑...")
@@ -120,7 +152,10 @@ class ComplexTab(QWidget):
         genion_group = QGroupBox("4. 中和系统电荷 (genion)")
         genion_layout = QFormLayout()
         
-        genion_info = QLabel("将自动运行 grompp 生成 ions.tpr，并使用 genion 替换水分子添加离子。")
+        genion_info = QLabel("将自动运行 grompp 生成 ions.tpr，并使用 genion 替换水分子添加离子。\n"
+                             "⚠️ 大体系（含配体）常因溶剂组号错误失败！请查看控制台 [GMX] Group 列表后输入正确组。")
+        genion_info.setWordWrap(True)
+        genion_info.setStyleSheet("color:#c00; font-size:11px;")
         genion_layout.addRow(genion_info)
 
         self.conc_input = QLineEdit("0.15")
@@ -136,7 +171,29 @@ class ComplexTab(QWidget):
         self.neutral_check.setChecked(True)
         genion_layout.addRow("", self.neutral_check)
 
+        # === 关键修复：溶剂组可配置 ===
+        solvent_layout = QHBoxLayout()
+        self.solvent_group_input = QLineEdit("SOL")
+        self.solvent_group_input.setPlaceholderText("SOL 或组号 (如 13 / 23)")
+        self.solvent_group_input.setFixedWidth(140)
+        self.solvent_group_input.setToolTip("大体系常见：\n"
+                                            "• SOL (水组名)\n"
+                                            "• 13 (配体组，常出现在日志)\n"
+                                            "• 23 或更高 (Water_and_ions)\n"
+                                            "运行失败后请在全局日志里找 Group 列表，填入对应数字最稳！")
+        
+        btn_group_help = QPushButton("查看组号建议")
+        btn_group_help.setFixedWidth(100)
+        btn_group_help.clicked.connect(self.show_genion_group_help)
+        
+        solvent_layout.addWidget(QLabel("溶剂组 (最重要):"))
+        solvent_layout.addWidget(self.solvent_group_input)
+        solvent_layout.addWidget(btn_group_help)
+        solvent_layout.addStretch()
+        genion_layout.addRow("", solvent_layout)
+
         btn_run_genion = QPushButton("运行 grompp & genion")
+        btn_run_genion.setStyleSheet("background-color:#8B0000; color:white; font-weight:bold;")
         btn_run_genion.clicked.connect(self.run_genion)
         genion_layout.addRow("", btn_run_genion)
         
@@ -378,7 +435,6 @@ class ComplexTab(QWidget):
         if not self.cwd: return
         
         # 先运行 grompp 生成 ions.tpr
-        # 对于加离子，通常使用任意一个简单的 mdp 即可。我们创建一个临时的 ions.mdp
         ions_mdp_path = os.path.join(self.cwd, "ions.mdp")
         with open(ions_mdp_path, "w") as f:
             f.write("; ions.mdp - used as input into grompp to generate ions.tpr\n")
@@ -423,9 +479,15 @@ class ComplexTab(QWidget):
             
         self.main_window.log(f"\n>>> 运行 genion: {' '.join(args_genion)}")
         
-        # genion 需要选择替换溶剂的组，通常选 13 (SOL) 或者 15 (Water)
-        # 我们默认输入 13 试试，或者发送 "SOL"
-        self.worker_genion = self.runner.create_worker(args_genion, cwd=self.cwd, input_text="SOL\n")
+        # === 关键修复：使用用户指定的溶剂组 ===
+        solvent = self.solvent_group_input.text().strip() or "SOL"
+        # 确保以换行结束
+        if not solvent.endswith('\n'):
+            solvent += '\n'
+        
+        self.main_window.log(f">>> 使用溶剂组输入: {repr(solvent.strip())} （推荐大体系用组号如 23）")
+        
+        self.worker_genion = self.runner.create_worker(args_genion, cwd=self.cwd, input_text=solvent)
         self.worker_genion.output_signal.connect(self.main_window.log)
         self.worker_genion.finished_signal.connect(self.on_genion_finished)
         self.worker_genion.start()
@@ -436,6 +498,35 @@ class ComplexTab(QWidget):
             QMessageBox.information(self, "成功", "离子添加成功，生成 complex_solv_ions.gro！\n复合物系统准备完毕。")
         else:
             QMessageBox.critical(self, "错误", f"genion 失败:\n{message}")
+
+    def show_genion_group_help(self):
+        """帮助用户理解大体系 genion 组号问题"""
+        help_text = """大体系（含配体）genion 失败常见原因及解决：
+
+1. 常见问题：
+   • 配体加入后，溶剂组号发生了变化（不再是 13）。
+   • 你日志中常看到：
+     Group    13 (            UNK) ...
+     Group    23 ( Water_and_ions) ...
+
+2. 推荐做法：
+   • 运行 genion 之前，先看全局日志里的 Group 列表。
+   • 填入 **数字组号**（例如 23）最可靠。
+   • 或者输入 "SOL" （如果 gmx 识别名称）。
+
+3. 快速查看组号方法：
+   在终端手动运行：
+   gmx make_ndx -f complex_solv.gro -o /tmp/ndxtest.ndx
+   （输入 q 退出后看输出）
+
+4. 当前输入框支持：
+   • SOL
+   • 13
+   • 23
+   • 任何数字组号
+
+如果还是失败，请复制 genion 失败时的完整 [GMX] 输出发给我。"""
+        QMessageBox.information(self, "genion 溶剂组选择帮助", help_text)
 
     # ========== 严格版：配体位置限制（永远使用纯配体小文件 + 自动组0，无阻塞） ==========
     def generate_ligand_posre(self):
