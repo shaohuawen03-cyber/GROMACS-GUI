@@ -22,7 +22,14 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("GROMACS GUI")
         self.resize(1000, 750)
-        
+
+        # === 尽早初始化关键属性（防止任何早期调用 log() 或其他导致 AttributeError） ===
+        self.pipeline_running = False
+        self.current_pipeline_step = 0
+        self.pipeline_steps = []
+        self._log_buffer = []
+        self._log_timer = None   # will be started below
+
         self.runner = GromacsRunner()
         
         # 主布局: 水平分割 (左侧导航, 右侧内容)
@@ -143,7 +150,10 @@ class MainWindow(QMainWindow):
         self.chk_manual_test_passed = QCheckBox("✅ 我已手动测试通过 pdb2gmx（溶液或复合物）")
         self.chk_manual_test_passed.setChecked(False)
         self.chk_manual_test_passed.setStyleSheet("font-weight: bold; color: #006400; font-size: 13px;")
-        self.chk_manual_test_passed.stateChanged.connect(self._update_run_all_button)
+        # Use safe lambda so that even if method lookup timing is weird, we don't crash at startup
+        self.chk_manual_test_passed.stateChanged.connect(
+            lambda checked: self._update_run_all_button() if hasattr(self, "_update_run_all_button") else None
+        )
         manual_layout.addWidget(self.chk_manual_test_passed)
 
         btn_mark_tested = QPushButton("我已手动测试成功 → 勾选")
@@ -163,10 +173,19 @@ class MainWindow(QMainWindow):
         tip.setStyleSheet("color: #666; font-size: 11px;")
         self.right_layout.addWidget(tip)
 
+        # === 初始化 pipeline 状态 + 异步日志缓冲（必须在任何 log() 之前，且只初始化一次） ===
+        self.pipeline_running = False
+        self.current_pipeline_step = 0
+        self.pipeline_steps = []
+        self._log_buffer = []
+        self._log_timer = QTimer(self)
+        self._log_timer.timeout.connect(self._flush_log_buffer)
+        self._log_timer.start(1200)   # 每 1.2 秒批量刷新一次 GUI（非常保守）
+
         self._update_run_all_button()
 
     def _update_run_all_button(self):
-        """动态更新一键按钮样式和文字"""
+        """动态更新一键按钮样式和文字（仅负责样式，不做初始化）"""
         try:
             if hasattr(self, 'btn_run_all') and hasattr(self, 'chk_manual_test_passed'):
                 checked = self.chk_manual_test_passed.isChecked()
@@ -178,17 +197,6 @@ class MainWindow(QMainWindow):
                     self.btn_run_all.setText("🚀 一键运行完整流程 (请先勾选手动测试通过)")
         except Exception:
             pass
-
-        # Pipeline state
-        self.pipeline_running = False
-        self.current_pipeline_step = 0
-        self.pipeline_steps = []  # will be populated when starting
-
-        # === 异步日志缓冲（防止高频输出导致 GUI 卡死）===
-        self._log_buffer = []
-        self._log_timer = QTimer(self)
-        self._log_timer.timeout.connect(self._flush_log_buffer)
-        self._log_timer.start(1200)   # 每 1.2 秒批量刷新一次 GUI（非常保守）
 
     @property
     def verbose(self):
@@ -232,6 +240,8 @@ class MainWindow(QMainWindow):
         # 控制台永远实时打印（最可靠的输出）
         print(formatted)
         # 放入缓冲，定时批量写入 GUI（防止高频输出卡死）
+        if not hasattr(self, '_log_buffer') or self._log_buffer is None:
+            self._log_buffer = []
         self._log_buffer.append(formatted)
 
     def _flush_log_buffer(self):
