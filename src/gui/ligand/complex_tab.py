@@ -90,8 +90,8 @@ class ComplexTab(QWidget):
         btn_gen_posre.setStyleSheet("background-color: #006400; color: white; font-weight: bold;")
         posre_layout.addWidget(btn_gen_posre)
 
-        tip_posre = QLabel("提示：运行后请在弹出的交互窗口选择配体对应的组编号（非 Protein）。")
-        tip_posre.setStyleSheet("color: #888; font-size: 10px;")
+        tip_posre = QLabel("提示：将自动使用【配体准备】导入的纯配体 .gro（组 0），无需任何交互窗口。适合大体系（em.gro 不会被使用）。")
+        tip_posre.setStyleSheet("color: #006400; font-size: 10px; font-weight: bold;")
         posre_layout.addWidget(tip_posre)
 
         posre_group.setLayout(posre_layout)
@@ -437,35 +437,54 @@ class ComplexTab(QWidget):
         else:
             QMessageBox.critical(self, "错误", f"genion 失败:\n{message}")
 
-    # ========== 新增：配体位置限制生成（用户要求） ==========
+    # ========== 严格版：配体位置限制（永远使用纯配体小文件 + 自动组0，无阻塞） ==========
     def generate_ligand_posre(self):
-        """生成配体位置限制文件 posre_ligand.itp（推荐在 EM 前/后运行）"""
-        if not self.cwd or not getattr(self, 'ligand_gro', None):
-            QMessageBox.warning(self, "警告", "请先在【配体准备】中导入配体，并确保已加载配体信息")
+        """
+        生成 posre_ligand.itp —— 严格使用配体准备阶段导入的**纯配体 .gro**
+
+        核心原则（解决大体系 genrestr 阻塞问题）：
+        - 永远只使用 self.ligand_gro（来自【配体准备】导入的原始小文件，如 UNK.gro）。
+        - 纯配体文件只有 1-2 个组，genrestr 立即打印并退出。
+        - 自动发送 "0\n" （组 0 几乎总是配体）。
+        - **绝不** fallback 到 em.gro / complex.gro 等大文件（那是卡死的根源）。
+        - 如果没有纯配体文件 → 给出清晰警告，要求用户重新导入。
+        """
+        if not self.cwd:
+            QMessageBox.warning(self, "警告", "请先设置工作目录")
             return
 
-        # 优先使用能量最小化后的结构（如果存在），否则用复合物或配体自身
-        candidates = ["em.gro", "complex.gro", self.ligand_gro, "complex_solv.gro"]
-        struct_file = None
-        for cand in candidates:
-            if os.path.exists(os.path.join(self.cwd, cand)):
-                struct_file = cand
-                break
-
-        if not struct_file:
-            QMessageBox.warning(self, "警告", "未找到可用的结构文件（em.gro / complex.gro / ligand.gro）")
+        if not getattr(self, 'ligand_gro', None):
+            QMessageBox.warning(
+                self, "警告",
+                "未检测到纯配体结构文件！\n\n"
+                "请先切换到【配体准备】标签页，正确导入配体（同时提供 .itp 和 .gro/.pdb）。\n"
+                "支持任意原始文件名（如 UNK.gro、ligand.gro、LIG.gro 等）。\n\n"
+                "导入成功后，状态栏会显示“✅ 已加载配体”，然后再返回此页点击生成 posre。\n\n"
+                "此功能**强制使用纯配体小文件**，绝不使用 em.gro 等大文件，以避免打印数十个组并阻塞。"
+            )
             return
 
-        self.main_window.log(f"\n>>> 使用结构文件 {struct_file} 生成配体位置限制")
+        p = os.path.join(self.cwd, self.ligand_gro)
+        if not os.path.exists(p):
+            QMessageBox.warning(
+                self, "警告",
+                f"配体结构文件 {self.ligand_gro} 不存在于工作目录中。\n\n"
+                "可能原因：文件被删除、移动或工作目录切换。\n"
+                "请返回【配体准备】重新导入配体 .gro 文件。"
+            )
+            return
 
-        # 直接用配体结构文件生成限制（通常只有配体一个组，交互最简单）
-        # 如果用 complex.gro，需要用户选择组编号
-        args = ["genrestr", "-f", struct_file, "-o", "posre_ligand.itp", "-fc", "1000", "1000", "1000"]
+        ligand_struct = self.ligand_gro
+        self.main_window.log(f"\n>>> [posre] 强制使用纯配体文件: {ligand_struct}")
+        self.main_window.log(">>> （来自配体准备阶段，文件很小，只有1-2个组，不会阻塞）")
+
+        args = ["genrestr", "-f", ligand_struct, "-o", "posre_ligand.itp", "-fc", "1000", "1000", "1000"]
+        input_text = "0\n"
 
         self.main_window.log(f"\n>>> 正在运行: gmx {' '.join(args)}")
-        self.main_window.log("提示：如果弹出组选择菜单，请在控制台输入配体对应的组编号（通常是 1、2 或最后一个组）")
+        self.main_window.log(">>> 自动发送组号: 0 （纯配体组0）")
 
-        self.worker_posre = self.runner.create_worker(args, cwd=self.cwd)
+        self.worker_posre = self.runner.create_worker(args, cwd=self.cwd, input_text=input_text)
         self.worker_posre.output_signal.connect(self.main_window.log)
         self.worker_posre.finished_signal.connect(self.on_posre_finished)
 
