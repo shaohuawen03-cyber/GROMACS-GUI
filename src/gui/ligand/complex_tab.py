@@ -74,6 +74,29 @@ class ComplexTab(QWidget):
         build_group.setLayout(build_layout)
         layout.addWidget(build_group)
 
+        # 新增：配体位置限制（用户要求：能量最小化后需要加配体位置限制）
+        posre_group = QGroupBox("生成配体位置限制 (推荐在能量最小化前后执行)")
+        posre_layout = QVBoxLayout()
+
+        posre_info = QLabel(
+            "为配体生成位置限制文件 (posre_ligand.itp)。\n"
+            "后续 NVT/NPT 平衡时可通过 define = -DPOSRES_LIG 启用配体限制，防止配体漂移。"
+        )
+        posre_info.setStyleSheet("color: #555; font-size: 11px;")
+        posre_layout.addWidget(posre_info)
+
+        btn_gen_posre = QPushButton("生成 posre_ligand.itp (genrestr)")
+        btn_gen_posre.clicked.connect(self.generate_ligand_posre)
+        btn_gen_posre.setStyleSheet("background-color: #006400; color: white; font-weight: bold;")
+        posre_layout.addWidget(btn_gen_posre)
+
+        tip_posre = QLabel("提示：运行后请在弹出的交互窗口选择配体对应的组编号（非 Protein）。")
+        tip_posre.setStyleSheet("color: #888; font-size: 10px;")
+        posre_layout.addWidget(tip_posre)
+
+        posre_group.setLayout(posre_layout)
+        layout.addWidget(posre_group)
+
         # 3. 定义盒子与溶剂化 (editconf & solvate)
         box_group = QGroupBox("3. 定义盒子与溶剂化")
         box_layout = QFormLayout()
@@ -413,3 +436,62 @@ class ComplexTab(QWidget):
             QMessageBox.information(self, "成功", "离子添加成功，生成 complex_solv_ions.gro！\n复合物系统准备完毕。")
         else:
             QMessageBox.critical(self, "错误", f"genion 失败:\n{message}")
+
+    # ========== 新增：配体位置限制生成（用户要求） ==========
+    def generate_ligand_posre(self):
+        """生成配体位置限制文件 posre_ligand.itp（推荐在 EM 前/后运行）"""
+        if not self.cwd or not getattr(self, 'ligand_gro', None):
+            QMessageBox.warning(self, "警告", "请先在【配体准备】中导入配体，并确保已加载配体信息")
+            return
+
+        # 优先使用能量最小化后的结构（如果存在），否则用复合物或配体自身
+        candidates = ["em.gro", "complex.gro", self.ligand_gro, "complex_solv.gro"]
+        struct_file = None
+        for cand in candidates:
+            if os.path.exists(os.path.join(self.cwd, cand)):
+                struct_file = cand
+                break
+
+        if not struct_file:
+            QMessageBox.warning(self, "警告", "未找到可用的结构文件（em.gro / complex.gro / ligand.gro）")
+            return
+
+        self.main_window.log(f"\n>>> 使用结构文件 {struct_file} 生成配体位置限制")
+
+        # 直接用配体结构文件生成限制（通常只有配体一个组，交互最简单）
+        # 如果用 complex.gro，需要用户选择组编号
+        args = ["genrestr", "-f", struct_file, "-o", "posre_ligand.itp", "-fc", "1000", "1000", "1000"]
+
+        self.main_window.log(f"\n>>> 正在运行: gmx {' '.join(args)}")
+        self.main_window.log("提示：如果弹出组选择菜单，请在控制台输入配体对应的组编号（通常是 1、2 或最后一个组）")
+
+        self.worker_posre = self.runner.create_worker(args, cwd=self.cwd)
+        self.worker_posre.output_signal.connect(self.main_window.log)
+        self.worker_posre.finished_signal.connect(self.on_posre_finished)
+
+        self.set_buttons_enabled(False)
+        self.worker_posre.start()
+
+    def on_posre_finished(self, success, message):
+        self.set_buttons_enabled(True)
+        if success:
+            posre_file = os.path.join(self.cwd, "posre_ligand.itp")
+            if os.path.exists(posre_file):
+                self.main_window.log(f"✅✅✅ 配体位置限制文件已生成: {posre_file}")
+                QMessageBox.information(
+                    self, "成功",
+                    "配体位置限制文件 posre_ligand.itp 已生成！\n\n"
+                    "后续使用方法（NVT / NPT 平衡时）：\n"
+                    "1. 在 mdp 文件中添加：\n"
+                    "   define                  = -DPOSRES_LIG\n\n"
+                    "2. 在 topol.top 合适位置（通常在 [ moleculetype ] 段之后，或 #include 配体 itp 附近）添加：\n"
+                    "#ifdef POSRES_LIG\n"
+                    '#include "posre_ligand.itp"\n'
+                    "#endif\n\n"
+                    "注意：请根据需要调整力常数（-fc 参数），并确认 topol.top 中正确包含了配体 itp。"
+                )
+            else:
+                self.main_window.log("genrestr 运行成功，但未找到 posre_ligand.itp，请检查输出。")
+        else:
+            QMessageBox.critical(self, "错误", f"生成配体位置限制失败:\n{message}")
+            self.main_window.log(f"❌ posre 生成失败: {message}")

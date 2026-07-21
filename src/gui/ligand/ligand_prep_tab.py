@@ -115,25 +115,32 @@ class LigandPrepTab(QWidget):
             QMessageBox.warning(self, "警告", "文件不存在于工作目录中，请重新选择")
             return
             
-        # 复制文件到工作目录的标准命名 (ligand.itp / ligand.gro)
+        # 修复：不再强制重命名为 ligand.itp / ligand.gro
+        # 保留用户原始文件名（支持 UNL, LIG, MOL, 自定义名称等）
         try:
-            target_itp = os.path.join(self.cwd, "ligand.itp")
-            target_gro = os.path.join(self.cwd, "ligand.gro")
+            # 使用用户提供的原始文件名（去掉路径）
+            target_itp = os.path.join(self.cwd, itp_filename)
+            target_gro = os.path.join(self.cwd, gro_filename)
             
-            # 如果源文件和目标文件不同，则复制
-            if os.path.abspath(full_itp_path) != os.path.abspath(target_itp):
-                shutil.copy(full_itp_path, target_itp)
-            
-            if gro_filename.endswith('.pdb'):
-                # 转换 pdb -> gro
-                args = ["editconf", "-f", gro_filename, "-o", "ligand.gro"]
+            # 如果是 pdb，需要先转换
+            if gro_filename.lower().endswith('.pdb'):
+                # 转换 pdb -> gro，输出使用用户原始 gro 名称（去扩展名 + .gro）
+                base_name = os.path.splitext(gro_filename)[0]
+                target_gro = os.path.join(self.cwd, base_name + ".gro")
+                
+                args = ["editconf", "-f", gro_filename, "-o", os.path.basename(target_gro)]
                 self.worker_convert = self.runner.create_worker(args, cwd=self.cwd)
                 self.worker_convert.output_signal.connect(self.main_window.log)
-                self.worker_convert.finished_signal.connect(lambda s, m: self.on_convert_finished(s, m, target_itp, target_gro))
+                self.worker_convert.finished_signal.connect(
+                    lambda s, m: self.on_convert_finished(s, m, target_itp, target_gro)
+                )
                 self.worker_convert.start()
             else:
+                # 直接使用用户原始文件名，不强制重命名
                 if os.path.abspath(full_gro_path) != os.path.abspath(target_gro):
                     shutil.copy(full_gro_path, target_gro)
+                if os.path.abspath(full_itp_path) != os.path.abspath(target_itp):
+                    shutil.copy(full_itp_path, target_itp)
                 self.finish_setup(target_itp, target_gro)
                 
         except Exception as e:
