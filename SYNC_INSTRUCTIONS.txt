@@ -1,0 +1,71 @@
+================================================================================
+根本原因分析
+================================================================================
+
+从你贴的日志：
+
+Command line:
+gmx.EXE pdb2gmx -f tai.pdb ... -ff oplsaa ...
+
+Data prefix: C:\gmx2020.6_GPU     ← 错误！
+Working dir: E:\1AI\GROMACS-GUI\test
+
+真正可执行文件应该是：
+E:\gmx2020.6_GPU\bin\gmx.exe
+
+GUI 之前：
+- 捡到了一个叫 "gmx.EXE" 的奇怪 launcher
+- 没有正确设置 GMXDATA，导致 GROMACS 找不到 forcefield.itp
+
+这就是 "No force fields found" 的真正原因。
+
+================================================================================
+请立即同步我刚刚推送的修复
+================================================================================
+
+在 PowerShell 执行：
+
+cd E:\1AI\GROMACS-GUI
+
+git fetch origin
+git pull origin arena/019f84dc-gromacs-gui
+
+git log --oneline -2
+
+# 确认看到类似下面这行：
+# 3c54c8d fix: force real gmx.exe + auto set GMXDATA/GMXLIB
+
+然后**完全关闭 GUI**，重新启动：
+
+.\gmx\Scripts\Activate.ps1
+python src\main.py
+
+================================================================================
+启动后建议操作
+================================================================================
+
+1. 把工作目录设为 E:\1AI\GROMACS-GUI\test
+2. 确保 tai.pdb 在那个目录里
+3. 力场选 oplsaa（或 amber03）
+4. 点击“运行 pdb2gmx”
+
+现在应该能看到：
+- 它会优先使用 E:\gmx2020.6_GPU\bin\gmx.exe
+- 自动设置了 GMXDATA / GMXLIB
+- 全局日志会显示正确的命令
+
+如果还是失败，把新的完整日志贴出来。
+
+================================================================================
+临时手动测试（如果 pull 后还是问题）
+================================================================================
+
+.\gmx\Scripts\Activate.ps1
+
+$env:GMXDATA = "E:\gmx2020.6_GPU"
+$env:GMXLIB  = "E:\gmx2020.6_GPU\share\gromacs\top"
+
+python src\main.py
+
+再试一次 pdb2gmx。
+

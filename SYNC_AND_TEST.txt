@@ -1,0 +1,43 @@
+================================================================================
+问题根因（已确认）：
+================================================================================
+
+pdb2gmx 报错：
+No force fields found (files with name 'forcefield.itp' ...)
+
+从日志看：
+- 它调用的是 "gmx.EXE" （可能是包装器）
+- Data prefix 被识别成了 C:\gmx2020.6_GPU （错误）
+- 真正的可执行文件在 E:\gmx2020.6_GPU\bin\gmx.exe
+
+GUI 没有正确设置 GMXDATA，导致 GROMACS 找不到力场数据。
+
+================================================================================
+请现在执行
+================================================================================
+
+cd E:\1AI\GROMACS-GUI
+
+git fetch origin
+git pull origin arena/019f84dc-gromacs-gui
+
+git log --oneline -2
+
+# 然后完全关闭 GUI，重新启动
+.\gmx\Scripts\Activate.ps1
+python src\main.py
+
+================================================================================
+额外临时测试（如果 pull 后还是不行）
+================================================================================
+
+在 PowerShell 里先手动设置环境变量再启动 GUI：
+
+.\gmx\Scripts\Activate.ps1
+$env:GMXDATA = "E:\gmx2020.6_GPU"
+$env:GMXLIB  = "E:\gmx2020.6_GPU\share\gromacs\top"
+
+python src\main.py
+
+然后再试运行 pdb2gmx（amber03 或 oplsaa 都可以）。
+

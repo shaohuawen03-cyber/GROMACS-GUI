@@ -1,7 +1,7 @@
 from PyQt6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, 
-                             QHBoxLayout, QPushButton, QTextEdit, 
+                             QHBoxLayout, QPushButton, QPlainTextEdit, 
                              QLabel, QTabWidget, QMessageBox, QListWidget, QStackedWidget, QCheckBox)
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QFont
 import os
 import sys
@@ -107,10 +107,11 @@ class MainWindow(QMainWindow):
         # 默认选中第一项
         self.nav_list.setCurrentRow(0)
         
-        # 底部日志输出窗口 (全局共享)
-        self.log_output = QTextEdit()
+        # 底部日志输出窗口 (全局共享) —— 使用 QPlainTextEdit 性能更好 + 限制历史
+        self.log_output = QPlainTextEdit()
         self.log_output.setReadOnly(True)
-        self.log_output.setStyleSheet("background-color: #1e1e1e; color: #d4d4d4; font-family: Consolas;")
+        self.log_output.setStyleSheet("background-color: #1e1e1e; color: #d4d4d4; font-family: Consolas; font-size: 12px;")
+        self.log_output.setMaximumBlockCount(8000)   # 防止日志无限增长导致卡死
         self.right_layout.addWidget(QLabel("全局运行日志:"))
         self.right_layout.addWidget(self.log_output, stretch=1)
         
@@ -149,6 +150,12 @@ class MainWindow(QMainWindow):
         self.pipeline_running = False
         self.current_pipeline_step = 0
         self.pipeline_steps = []  # will be populated when starting
+
+        # === 异步日志缓冲（防止高频输出导致 GUI 卡死）===
+        self._log_buffer = []
+        self._log_timer = QTimer(self)
+        self._log_timer.timeout.connect(self._flush_log_buffer)
+        self._log_timer.start(1200)   # 每 1.2 秒批量刷新一次 GUI（非常保守）
 
     @property
     def verbose(self):
@@ -189,29 +196,23 @@ class MainWindow(QMainWindow):
         """向日志窗口输出信息（带时间戳）"""
         ts = datetime.now().strftime("%H:%M:%S")
         formatted = f"[{ts}] {message}"
-        # 同时输出到控制台（Spyder / 终端）——这是最可靠的输出方式
+        # 控制台永远实时打印（最可靠的输出）
         print(formatted)
-        # 写入 GUI
-        self.log_output.append(formatted)
-        # 强制刷新（Spyder + PyQt 经常需要这些）
-        self.log_output.verticalScrollBar().setValue(self.log_output.verticalScrollBar().maximum())
-        self.log_output.repaint()
-        try:
-            from PyQt6.QtWidgets import QApplication
-            QApplication.processEvents()
-        except:
-            pass
+        # 放入缓冲，定时批量写入 GUI（防止高频输出卡死）
+        self._log_buffer.append(formatted)
 
-    def _direct_append(self, text: str):
-        """最直接的写入方式，用于极端调试"""
-        print(f"[DIRECT] {text}")
-        self.log_output.append(text)
-        self.log_output.repaint()
+    def _flush_log_buffer(self):
+        if not self._log_buffer:
+            return
         try:
-            from PyQt6.QtWidgets import QApplication
-            QApplication.processEvents()
-        except:
+            # 一次性大块写入
+            text_to_add = "\n".join(self._log_buffer) + "\n"
+            self.log_output.moveCursor(self.log_output.textCursor().End)
+            self.log_output.insertPlainText(text_to_add)
+            self.log_output.moveCursor(self.log_output.textCursor().End)
+        except Exception:
             pass
+        self._log_buffer.clear()
 
     def log_step_start(self, step_name: str):
         """长任务开始时打印醒目标记 + 时间"""

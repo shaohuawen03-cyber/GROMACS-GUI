@@ -2,6 +2,7 @@ from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout,
                              QPushButton, QLabel, QGroupBox, QFileDialog, 
                              QLineEdit, QCheckBox, QMessageBox, QComboBox,
                              QFormLayout)
+from PyQt6.QtCore import Qt
 import os
 
 class TopologyTab(QWidget):
@@ -200,8 +201,8 @@ class TopologyTab(QWidget):
 
         # 使用异步 Worker + stdin 自动选择力场
         self.worker_pdb2gmx = self.runner.create_worker(args, cwd=self.cwd, input_text=selection)
-        self.worker_pdb2gmx.output_signal.connect(self.main_window.log)
-        self.worker_pdb2gmx.finished_signal.connect(self.on_pdb2gmx_finished)
+        self.worker_pdb2gmx.output_signal.connect(self.main_window.log, Qt.ConnectionType.QueuedConnection)
+        self.worker_pdb2gmx.finished_signal.connect(self.on_pdb2gmx_finished, Qt.ConnectionType.QueuedConnection)
         
         self.set_buttons_enabled(False)
 
