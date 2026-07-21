@@ -87,10 +87,12 @@ class GromacsWorker(QThread):
                     # 控制台永远实时（用户反馈中能看到这些）
                     print(f"[GMX] {stripped}")
 
-                    # ★★★ 故意完全不调用 output_signal.emit() ★★★
-                    # pdb2gmx 在 S-S 搜索 + 生成二面角时会狂吐上万行。
-                    # 任何 emit 都会让主线程冻结 → 卡退。
-                    # 所以这里**零信号**给 GUI。
+                    # 发送到 GUI 日志区（使用缓冲 + 定时 flush，不会导致冻结）
+                    # 这是解决“日志区不显示”的关键修复
+                    try:
+                        self.output_signal.emit(f"[GMX] {stripped}")
+                    except Exception:
+                        pass
 
             return_code = process.poll()
             

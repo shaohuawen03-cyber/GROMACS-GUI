@@ -16,7 +16,8 @@ class ComplexTab(QWidget):
         
         self.ligand_itp = None
         self.ligand_gro = None
-        
+        self.ff_index_edit = None   # will be created in init_ui
+
         self.init_ui()
 
     def init_ui(self):
@@ -75,6 +76,19 @@ class ComplexTab(QWidget):
         self.ff_combo.addItems(["amber03", "amber94", "amber96", "amber99", "amber99sb", "amber99sb-ildn", "charmm27", "oplsaa"])
         self.ff_combo.setCurrentText("oplsaa")
         pdb_layout.addRow("力场 (-ff):", self.ff_combo)
+
+        # === 关键新增：手动力场编号（解决“只有默认力场成功，其余力场报错”）===
+        ff_idx_layout = QHBoxLayout()
+        self.ff_index_edit = QLineEdit("15")
+        self.ff_index_edit.setFixedWidth(55)
+        self.ff_index_edit.setToolTip("重要！\n不同GROMACS版本力场编号不同。\n请先在终端运行一次 \"gmx pdb2gmx\" 看交互提示里的编号，\n然后在这里填写（oplsaa 通常是15）。\n切换力场后记得改这个编号！")
+        ff_idx_layout.addWidget(self.ff_index_edit)
+        ff_idx_layout.addWidget(QLabel("← 力场编号 (手动修改)"))
+        ff_idx_layout.addStretch()
+        pdb_layout.addRow("力场交互编号:", ff_idx_layout)
+
+        # 切换力场时自动建议编号
+        self.ff_combo.currentTextChanged.connect(self._update_ff_suggestion)
 
         self.water_combo = QComboBox()
         self.water_combo.addItems(["spce", "tip3p", "tip4p", "tip5p"])
@@ -227,7 +241,13 @@ class ComplexTab(QWidget):
     def run_pdb2gmx(self):
         pdb_filename = self.pdb_input.text()
         if not pdb_filename or not self.cwd:
-            QMessageBox.warning(self, "警告", "请选择蛋白文件或确保已设置工作目录。")
+            QMessageBox.warning(self, "警告", "请选择蛋白文件或确保已设置工作目录。\n\n请先去【配体准备】标签页导入配体并设置工作目录。")
+            return
+
+        # 检查文件是否存在（与 Solution Simulator 一致的清晰错误）
+        full_path = os.path.join(self.cwd, pdb_filename)
+        if not os.path.exists(full_path):
+            QMessageBox.warning(self, "警告", f"在工作目录中未找到文件: {pdb_filename}\n\n完整路径: {full_path}\n\n请确保：\n1. 文件已复制到工作目录\n2. 文件名正确（包括扩展名）\n3. 已通过【配体准备】正确设置工作目录")
             return
 
         ff = self.ff_combo.currentText()
@@ -240,15 +260,25 @@ class ComplexTab(QWidget):
         if ignh:
             args.append("-ignh")
 
-        # 通过 stdin 自动选择力场（15 = oplsaa）
-        ff_map = {
-            "amber03": "1", "amber94": "2", "amber96": "3", "amber99": "4",
-            "amber99sb": "5", "amber99sb-ildn": "6", "charmm27": "8",
-            "oplsaa": "15",
-        }
-        selection = ff_map.get(ff, "15") + "\n"
+        # 通过 stdin 自动选择力场
+        # 优先使用用户在界面上手动输入的编号（解决“只有默认力场成功，其余力场报错”）
+        try:
+            manual_idx = self.ff_index_edit.text().strip()
+            if manual_idx and manual_idx.isdigit():
+                selection = manual_idx + "\n"
+            else:
+                # fallback 到常见映射
+                ff_map = {
+                    "amber03": "1", "amber94": "2", "amber96": "3", "amber99": "4",
+                    "amber99sb": "5", "amber99sb-ildn": "6", "charmm27": "8",
+                    "oplsaa": "15",
+                }
+                selection = ff_map.get(ff, "15") + "\n"
+        except Exception:
+            selection = "15\n"
 
         print(f"[Complex] pdb2gmx args without -ff, stdin={repr(selection)}")
+        self.main_window.log(f">>> 使用力场编号 stdin: {selection.strip()} (力场: {ff})")
 
         self.worker_pdb2gmx = self.runner.create_worker(args, cwd=self.cwd, input_text=selection)
         self.worker_pdb2gmx.output_signal.connect(self.main_window.log, Qt.ConnectionType.QueuedConnection)
@@ -540,18 +570,21 @@ class ComplexTab(QWidget):
         - **绝不** fallback 到 em.gro / complex.gro 等大文件（那是卡死的根源）。
         - 如果没有纯配体文件 → 给出清晰警告，要求用户重新导入。
         """
+        self.main_window.log("\n>>> [posre] 用户点击了生成 posre_ligand.itp")
+
         if not self.cwd:
-            QMessageBox.warning(self, "警告", "请先设置工作目录")
+            QMessageBox.warning(self, "警告", "请先设置工作目录（通过【配体准备】导入配体时会自动设置）")
             return
 
         if not getattr(self, 'ligand_gro', None):
             QMessageBox.warning(
                 self, "警告",
                 "未检测到纯配体结构文件！\n\n"
-                "请先切换到【配体准备】标签页，正确导入配体（同时提供 .itp 和 .gro/.pdb）。\n"
-                "支持任意原始文件名（如 UNK.gro、ligand.gro、LIG.gro 等）。\n\n"
-                "导入成功后，状态栏会显示“✅ 已加载配体”，然后再返回此页点击生成 posre。\n\n"
-                "此功能**强制使用纯配体小文件**，绝不使用 em.gro 等大文件，以避免打印数十个组并阻塞。"
+                "请先切换到【1. 配体准备】标签页，\n"
+                "同时选择 .itp 和 .gro/.pdb 文件后点击「确认导入」\n"
+                "（支持任意原始文件名，如 ligand.gro / UNK.gro 等）。\n\n"
+                "导入成功后上方会显示绿色“✅ 已加载配体”，\n"
+                "然后再回到此页点击绿色按钮。"
             )
             return
 
@@ -559,14 +592,17 @@ class ComplexTab(QWidget):
         if not os.path.exists(p):
             QMessageBox.warning(
                 self, "警告",
-                f"配体结构文件 {self.ligand_gro} 不存在于工作目录中。\n\n"
-                "可能原因：文件被删除、移动或工作目录切换。\n"
-                "请返回【配体准备】重新导入配体 .gro 文件。"
+                f"在工作目录中未找到文件: {self.ligand_gro}\n\n"
+                f"完整路径: {p}\n\n"
+                "解决办法：\n"
+                "1. 返回【配体准备】重新导入配体 .gro 文件\n"
+                "2. 确认工作目录正确（状态栏显示的目录）\n"
+                "3. 确认文件没有被移动或删除"
             )
             return
 
         ligand_struct = self.ligand_gro
-        self.main_window.log(f"\n>>> [posre] 强制使用纯配体文件: {ligand_struct}")
+        self.main_window.log(f"\n>>> [posre] 强制使用纯配体文件: {ligand_struct} (cwd={self.cwd})")
         self.main_window.log(">>> （来自配体准备阶段，文件很小，只有1-2个组，不会阻塞）")
 
         args = ["genrestr", "-f", ligand_struct, "-o", "posre_ligand.itp", "-fc", "1000", "1000", "1000"]

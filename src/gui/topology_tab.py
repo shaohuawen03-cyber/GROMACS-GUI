@@ -60,6 +60,16 @@ class TopologyTab(QWidget):
         self.ff_combo.setCurrentText("oplsaa")
         pdb_layout.addRow("力场 (-ff):", self.ff_combo)
 
+        # === 新增：手动力场编号输入（解决“只有默认力场成功，其余力场报错”）===
+        ff_idx_layout = QHBoxLayout()
+        self.ff_index_edit = QLineEdit("15")
+        self.ff_index_edit.setFixedWidth(60)
+        self.ff_index_edit.setToolTip("gmx pdb2gmx 交互时力场的编号。\n默认 oplsaa = 15。\n切换其他力场报错时，请先在终端手动运行 gmx pdb2gmx 查看实际编号，然后填这里！")
+        ff_idx_layout.addWidget(self.ff_index_edit)
+        ff_idx_layout.addWidget(QLabel("(手动填力场编号)"))
+        ff_idx_layout.addStretch()
+        pdb_layout.addRow("力场编号 (stdin):", ff_idx_layout)
+
         # 水模型选择
         self.water_combo = QComboBox()
         self.water_combo.addItems(["spce", "tip3p", "tip4p", "tip5p"])
@@ -178,26 +188,24 @@ class TopologyTab(QWidget):
         if ignh:
             args.append("-ignh")
 
-        # 根据下拉框选择对应的编号（基于用户实际 GROMACS 安装列表）
         ff = self.ff_combo.currentText()
-        ff_map = {
-            "amber03": "1",
-            "amber94": "2",
-            "amber96": "3",
-            "amber99": "4",
-            "amber99sb": "5",
-            "amber99sb-ildn": "6",
-            "amberGS": "7",
-            "charmm27": "8",
-            "gromos43a1": "9",
-            "gromos43a2": "10",
-            "gromos45a3": "11",
-            "gromos53a5": "12",
-            "gromos53a6": "13",
-            "gromos54a7": "14",
-            "oplsaa": "15",
-        }
-        selection = ff_map.get(ff, "15") + "\n"   # 默认 oplsaa
+
+        # 优先使用用户在界面手动填写的力场编号（解决“只有默认力场成功，其余力场报错”）
+        try:
+            manual = self.ff_index_edit.text().strip()
+            if manual and manual.isdigit():
+                selection = manual + "\n"
+            else:
+                ff_map = {
+                    "amber03": "1", "amber94": "2", "amber96": "3", "amber99": "4",
+                    "amber99sb": "5", "amber99sb-ildn": "6", "charmm27": "8",
+                    "oplsaa": "15",
+                }
+                selection = ff_map.get(ff, "15") + "\n"
+        except Exception:
+            selection = "15\n"
+
+        self.main_window.log(f">>> 使用力场编号 (stdin): {selection.strip()}  (力场: {ff})")
 
         # 使用异步 Worker + stdin 自动选择力场
         self.worker_pdb2gmx = self.runner.create_worker(args, cwd=self.cwd, input_text=selection)
