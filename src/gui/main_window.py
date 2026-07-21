@@ -183,20 +183,23 @@ class MainWindow(QMainWindow):
         """长任务开始时打印醒目标记 + 时间"""
         ts = datetime.now().strftime("%H:%M:%S")
         self.log("")
-        self.log("┌" + "─" * 68)
-        self.log(f"│ ▶️ 开始步骤: {step_name}")
-        self.log(f"│ 开始时间: {ts}")
-        self.log("└" + "─" * 68)
+        self.log("┏" + "━" * 68 + "┓")
+        self.log(f"┃ ▶️ 开始: {step_name}     @ {ts}")
+        self.log("┗" + "━" * 68 + "┛")
 
     def log_step_complete(self, step_name: str):
-        """长任务结束时打印完成时间 + 醒目标记"""
+        """长任务结束时打印完成时间 + 醒目标记（用户最关心的）"""
         ts = datetime.now().strftime("%H:%M:%S")
         self.log("")
-        self.log("┌" + "─" * 68)
-        self.log(f"│ ✅✅✅ 步骤完成: {step_name}")
-        self.log(f"│ 结束时间: {ts}")
-        self.log("└" + "─" * 68)
+        self.log("┏" + "━" * 68 + "┓")
+        self.log(f"┃ ✅✅✅ 完成: {step_name}     @ {ts}")
+        self.log("┗" + "━" * 68 + "┛")
         self.log("")
+
+    def log_verbose(self, message: str):
+        """只有在 Verbose 模式下才显示的详细日志"""
+        if getattr(self, 'verbose', True):
+            self.log(f"[V] {message}")
 
     def test_gmx(self):
         """测试GROMACS是否可用"""
