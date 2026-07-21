@@ -5,7 +5,15 @@ from .worker import GromacsWorker
 
 class GromacsRunner:
     def __init__(self):
-        self.gmx_path = get_gmx_path()
+        raw_path = get_gmx_path()
+        self.gmx_path = raw_path
+
+        # 关键修复：尝试设置 GROMACS 数据目录（解决 No force fields found）
+        try:
+            from .config import setup_gmx_environment
+            setup_gmx_environment(self.gmx_path)
+        except:
+            pass
 
     def run_command(self, args, cwd=None, input_text=None):
         """
