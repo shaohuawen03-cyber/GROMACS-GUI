@@ -188,9 +188,12 @@ class TopologyTab(QWidget):
     def on_pdb2gmx_finished(self, success, message):
         self.set_buttons_enabled(True)
         if success:
+            self.main_window.log("✅ pdb2gmx 成功完成")
             QMessageBox.information(self, "成功", "pdb2gmx 运行完成！生成了 processed.gro 和 topol.top")
         else:
-            QMessageBox.critical(self, "错误", f"pdb2gmx 运行失败: {message}")
+            self.main_window.log("❌ pdb2gmx 失败")
+            self.main_window.log(message)   # 关键：把完整错误输出打印到全局日志
+            QMessageBox.critical(self, "错误", f"pdb2gmx 运行失败\n\n{message}")
 
     def run_editconf(self):
         if not self.cwd:
@@ -218,9 +221,12 @@ class TopologyTab(QWidget):
     def on_editconf_finished(self, success, message):
         self.set_buttons_enabled(True)
         if success:
+            self.main_window.log("✅ editconf 成功")
             QMessageBox.information(self, "成功", "editconf 运行完成！生成了 newbox.gro")
         else:
-            QMessageBox.critical(self, "错误", f"editconf 运行失败: {message}")
+            self.main_window.log("❌ editconf 失败")
+            self.main_window.log(message)
+            QMessageBox.critical(self, "错误", f"editconf 运行失败\n\n{message}")
 
     def run_solvate(self):
         if not self.cwd:
