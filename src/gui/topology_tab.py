@@ -168,12 +168,17 @@ class TopologyTab(QWidget):
             QMessageBox.warning(self, "警告", f"在工作目录中未找到文件: {pdb_filename}")
             return
 
-        ff = self.ff_combo.currentText()
         water = self.water_combo.currentText()
         ignh = self.ignh_check.isChecked()
 
-        # 构造命令时只使用文件名，因为 cwd 已经设置正确
-        args = ["pdb2gmx", "-f", pdb_filename, "-o", "processed.gro", "-p", "topol.top", "-ff", ff, "-water", water]
+        # 重要修复：
+        # 我们**故意不传 -ff** 参数。
+        # 之前传 -ff oplsaa 时，如果 GROMACS 在多个地方找到 oplsaa.ff，就会报：
+        # "Force field 'oplsaa' occurs in 2 places"
+        #
+        # 现在依赖 GMXLIB（在 runner 初始化时已设置）来自动找到力场。
+        # 用户在界面上选的力场目前仅作参考，不影响命令。
+        args = ["pdb2gmx", "-f", pdb_filename, "-o", "processed.gro", "-p", "topol.top", "-water", water]
         if ignh:
             args.append("-ignh")
 
