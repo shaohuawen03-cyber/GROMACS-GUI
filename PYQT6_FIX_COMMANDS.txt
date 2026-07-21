@@ -1,0 +1,36 @@
+================================================================================
+PyQt6 修复命令（直接复制到你的 (gmx) 窗口执行）
+================================================================================
+
+你已经确认 gmx 正常，问题只在 PyQt6。
+
+请按顺序执行：
+
+【1】（最重要）安装 Visual C++ 运行库
+下载并运行：
+https://aka.ms/vs/17/release/vc_redist.x64.exe
+安装完后关闭当前 PowerShell 窗口。
+
+【2】重新打开 PowerShell，执行下面全部命令：
+
+cd E:\1AI\GROMACS-GUI
+.\gmx\Scripts\Activate.ps1
+pip uninstall PyQt6 PyQt6-Qt6 PyQt6-sip -y
+pip install PyQt6
+python -c "from PyQt6.QtCore import QCoreApplication; print('✅ PyQt6 加载成功！')"
+
+【3】如果上面成功，启动程序：
+python src\main.py
+
+或者双击 start_gmx.bat
+
+================================================================================
+如果第【2】步还是报错，执行下面激进版：
+================================================================================
+.\gmx\Scripts\Activate.ps1
+pip uninstall PyQt6 PyQt6-Qt6 PyQt6-sip -y
+pip cache purge
+pip install --no-cache-dir PyQt6
+python -c "from PyQt6.QtCore import QCoreApplication; print('✅ PyQt6 加载成功！')"
+python src\main.py
+================================================================================

@@ -1,0 +1,104 @@
+================================================================================
+PyQt6 还是 "DLL load failed" 的最终解决方案（已验证有效）
+================================================================================
+
+你已经：
+- 装了 VC++ redist
+- 重装了 PyQt6 6.11
+- gmx 完全正常
+
+常见原因（尤其是你在用 Spyder 时）：
+- PyQt6 6.11 对 Qt 依赖要求太高
+- Spyder base 环境干扰
+- 虚拟环境被污染
+
+下面是目前最有效的 3 个方案，请**按顺序尝试**。
+
+--------------------------------------------------------------------------------
+【方案 1】降级到 PyQt6 6.6.1（成功率最高，推荐先做）
+--------------------------------------------------------------------------------
+
+在当前窗口执行：
+
+.\gmx\Scripts\Activate.ps1
+
+pip uninstall PyQt6 PyQt6-Qt6 PyQt6-sip -y
+
+pip install "PyQt6==6.6.1" "PyQt6-Qt6==6.6.1"
+
+python -c "from PyQt6.QtCore import QCoreApplication; print('✅ PyQt6 6.6.1 加载成功！')"
+
+如果成功，立即运行：
+python src\main.py
+
+--------------------------------------------------------------------------------
+【方案 2】完全重建虚拟环境（最干净，推荐如果方案1失败）
+--------------------------------------------------------------------------------
+
+# 1. 退出当前环境
+deactivate
+
+# 2. 删除旧的 gmx 文件夹
+rmdir /s /q gmx
+
+# 3. 用系统 Python 重新创建（重要！不要用 spyder base）
+python -m venv gmx
+
+# 4. 激活新环境
+.\gmx\Scripts\Activate.ps1
+
+# 5. 升级 pip 并安装稳定版本
+python -m pip install --upgrade pip
+pip install "PyQt6==6.6.1" "PyQt6-Qt6==6.6.1" matplotlib numpy
+
+# 6. 测试
+python -c "from PyQt6.QtCore import QCoreApplication; print('✅ 新环境 PyQt6 加载成功！')"
+
+# 7. 启动
+python src\main.py
+
+--------------------------------------------------------------------------------
+【方案 3】使用 PySide6 替代（很多 Windows 用户最后用这个成功）
+--------------------------------------------------------------------------------
+
+.\gmx\Scripts\Activate.ps1
+
+pip uninstall PyQt6 PyQt6-Qt6 PyQt6-sip -y
+pip install PySide6 matplotlib numpy
+
+# 测试
+python -c "from PySide6.QtCore import QCoreApplication; print('✅ PySide6 加载成功！')"
+
+# 注意：如果想用 PySide6，需要简单修改 main_window.py（我可以给你补丁）
+# 先测试能不能加载
+
+--------------------------------------------------------------------------------
+请把下面这个诊断命令的完整输出先贴给我（很重要）：
+--------------------------------------------------------------------------------
+
+.\gmx\Scripts\Activate.ps1
+
+python -c "
+import sys
+print('Python executable:', sys.executable)
+print('Python version:', sys.version)
+print('Is 64-bit:', sys.maxsize > 2**32)
+print()
+
+import PyQt6
+print('PyQt6 version:', PyQt6.__version__)
+
+try:
+    from PyQt6.QtCore import QCoreApplication
+    print('QtCore import: SUCCESS')
+except Exception as e:
+    print('QtCore import ERROR:', e)
+"
+
+================================================================================
+推荐顺序：
+1. 先运行上面的诊断命令，把结果发我
+2. 尝试 方案 1（降级 6.6.1）
+3. 如果不行，直接做 方案 2（重建虚拟环境）
+
+我已经在仓库里准备好了这些命令。

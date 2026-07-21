@@ -1,0 +1,86 @@
+================================================================================
+PyQt6 仍然失败的终极解决方案（按顺序尝试）
+================================================================================
+
+你已经装了 VC++，重装 PyQt6 也没用 → 需要更强措施。
+
+请在 **当前 (gmx)** 环境里**依次**尝试下面命令。
+
+--------------------------------------------------------------------------------
+【方案 A - 最推荐】直接降级到 6.6.1（成功率最高）
+--------------------------------------------------------------------------------
+
+.\gmx\Scripts\Activate.ps1
+
+pip uninstall PyQt6 PyQt6-Qt6 PyQt6-sip -y
+
+pip install "PyQt6==6.6.1" "PyQt6-Qt6==6.6.1"
+
+python -c "from PyQt6.QtCore import QCoreApplication; print('✅ PyQt6 6.6.1 加载成功！')"
+
+# 如果上面成功，立即启动
+python src\main.py
+
+--------------------------------------------------------------------------------
+【方案 B】完全删除并重建虚拟环境（推荐如果 A 失败）
+--------------------------------------------------------------------------------
+
+deactivate
+
+# 删除旧的 gmx 环境
+rmdir /s /q gmx
+
+# 重新创建
+python -m venv gmx
+
+# 激活新环境
+.\gmx\Scripts\Activate.ps1
+
+python -m pip install --upgrade pip
+
+# 使用稳定版本安装
+pip install "PyQt6==6.6.1" "PyQt6-Qt6==6.6.1" matplotlib numpy
+
+python -c "from PyQt6.QtCore import QCoreApplication; print('✅ 新环境 PyQt6 加载成功！')"
+
+python src\main.py
+
+--------------------------------------------------------------------------------
+【方案 C】先诊断一下当前问题
+--------------------------------------------------------------------------------
+
+.\gmx\Scripts\Activate.ps1
+
+python -c "
+import sys
+print('Python 版本:', sys.version)
+print('Python 路径:', sys.executable)
+print('64位?', sys.maxsize > 2**32)
+print()
+
+try:
+    import PyQt6
+    print('PyQt6 版本:', PyQt6.__version__)
+    from PyQt6.QtCore import QCoreApplication
+    print('✅ QtCore 可以导入')
+except Exception as e:
+    print('❌ 错误:', e)
+"
+
+--------------------------------------------------------------------------------
+【方案 D】终极清理 + 安装 6.6.1
+--------------------------------------------------------------------------------
+
+.\gmx\Scripts\Activate.ps1
+pip uninstall PyQt6 PyQt6-Qt6 PyQt6-sip -y
+pip cache purge
+pip install --no-cache-dir "PyQt6==6.6.1" "PyQt6-Qt6==6.6.1"
+
+python -c "from PyQt6.QtCore import QCoreApplication; print('✅ 清理后加载成功！')"
+
+python src\main.py
+
+--------------------------------------------------------------------------------
+请先执行【方案 A】，把输出贴给我。
+如果还是不行，再执行【方案 B】（重建环境），这是目前最有效的办法。
+================================================================================
