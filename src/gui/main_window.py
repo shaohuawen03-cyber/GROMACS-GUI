@@ -132,31 +132,52 @@ class MainWindow(QMainWindow):
 
         self.right_layout.addLayout(btn_layout)
 
-        # === 新增：一键运行完整流程 + Verbose 开关 + 手动确认 ===
-        controls_layout = QHBoxLayout()
-
+        # === Verbose + 手动测试确认（用户要求：测试完后才能一键） ===
         self.chk_verbose = QCheckBox("Verbose 模式 (显示详细进度 + 结束时间)")
         self.chk_verbose.setChecked(True)
-        controls_layout.addWidget(self.chk_verbose)
+        self.right_layout.addWidget(self.chk_verbose)
 
-        self.chk_manual_test_passed = QCheckBox("已手动测试通过 (pdb2gmx / 复合物等)")
+        # 手动测试确认区（非常醒目）
+        manual_layout = QHBoxLayout()
+
+        self.chk_manual_test_passed = QCheckBox("✅ 我已手动测试通过 pdb2gmx（溶液或复合物）")
         self.chk_manual_test_passed.setChecked(False)
+        self.chk_manual_test_passed.setStyleSheet("font-weight: bold; color: #006400; font-size: 13px;")
         self.chk_manual_test_passed.stateChanged.connect(self._update_run_all_button)
-        controls_layout.addWidget(self.chk_manual_test_passed)
+        manual_layout.addWidget(self.chk_manual_test_passed)
 
+        btn_mark_tested = QPushButton("我已手动测试成功 → 勾选")
+        btn_mark_tested.setStyleSheet("background-color: #228B22; color: white; font-weight: bold; padding: 4px 10px;")
+        btn_mark_tested.clicked.connect(lambda: self.chk_manual_test_passed.setChecked(True))
+        manual_layout.addWidget(btn_mark_tested)
+
+        self.right_layout.addLayout(manual_layout)
+
+        # 一键按钮
         self.btn_run_all = QPushButton("🚀 一键运行完整流程 (Topology → EM → EQ → MD)")
-        self.btn_run_all.setStyleSheet("background-color: #006400; color: white; font-weight: bold; padding: 8px;")
+        self.btn_run_all.setStyleSheet("background-color: #555; color: #ccc; padding: 10px; font-weight: bold;")
         self.btn_run_all.clicked.connect(self.run_full_pipeline)
-        controls_layout.addWidget(self.btn_run_all)
+        self.right_layout.addWidget(self.btn_run_all)
 
-        self.right_layout.addLayout(controls_layout)
-
-        # 提示
-        tip = QLabel("提示：先手动跑通 pdb2gmx（溶液或复合物），勾选确认框，一键流程会尝试继续后续步骤。")
-        tip.setStyleSheet("color: #888; font-size: 11px;")
+        tip = QLabel("使用方法：1. 手动跑通 pdb2gmx（看控制台 [GMX] 输出）  2. 点击「我已手动测试成功」  3. 再点一键流程")
+        tip.setStyleSheet("color: #666; font-size: 11px;")
         self.right_layout.addWidget(tip)
 
         self._update_run_all_button()
+
+    def _update_run_all_button(self):
+        """动态更新一键按钮样式和文字"""
+        try:
+            if hasattr(self, 'btn_run_all') and hasattr(self, 'chk_manual_test_passed'):
+                checked = self.chk_manual_test_passed.isChecked()
+                if checked:
+                    self.btn_run_all.setStyleSheet("background-color: #006400; color: white; font-weight: bold; padding: 8px;")
+                    self.btn_run_all.setText("🚀 一键运行完整流程 (已确认手动测试通过)")
+                else:
+                    self.btn_run_all.setStyleSheet("background-color: #555; color: #ccc; font-weight: normal; padding: 8px;")
+                    self.btn_run_all.setText("🚀 一键运行完整流程 (请先勾选手动测试通过)")
+        except Exception:
+            pass
 
         # Pipeline state
         self.pipeline_running = False

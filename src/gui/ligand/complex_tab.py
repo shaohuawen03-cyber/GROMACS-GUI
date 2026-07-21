@@ -154,18 +154,21 @@ class ComplexTab(QWidget):
         water = self.water_combo.currentText()
         ignh = self.ignh_check.isChecked()
 
-        # 关键修复：完全移除 -ff（避免 "occurs in 2 places"），通过 stdin 选择力场
+        # ★★★ 关键修复（和 Solution Simulator 完全一致）★★★
+        # 绝对不要传 -ff，否则会出现 "Force field 'oplsaa' occurs in 2 places"
         args = ["pdb2gmx", "-f", pdb_filename, "-o", "protein.gro", "-p", "topol.top", "-water", water]
         if ignh:
             args.append("-ignh")
 
-        # 力场选择编号（与 solution tab 完全一致，15 = oplsaa）
+        # 通过 stdin 自动选择力场（15 = oplsaa）
         ff_map = {
             "amber03": "1", "amber94": "2", "amber96": "3", "amber99": "4",
             "amber99sb": "5", "amber99sb-ildn": "6", "charmm27": "8",
             "oplsaa": "15",
         }
         selection = ff_map.get(ff, "15") + "\n"
+
+        print(f"[Complex] pdb2gmx args without -ff, stdin={repr(selection)}")
 
         self.worker_pdb2gmx = self.runner.create_worker(args, cwd=self.cwd, input_text=selection)
         self.worker_pdb2gmx.output_signal.connect(self.main_window.log, Qt.ConnectionType.QueuedConnection)
