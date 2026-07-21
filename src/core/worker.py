@@ -19,6 +19,12 @@ class GromacsWorker(QThread):
         cmd_str = ' '.join(cmd)
         cwd_str = self.cwd or os.getcwd()
         
+        # 同时打印到控制台（Spyder / PowerShell），方便看到输出
+        print(f"\n>>> 正在执行: {cmd_str}")
+        print(f"    工作目录 (cwd): {cwd_str}")
+        if self.input_text:
+            print(f"    自动输入: {self.input_text.strip()}")
+
         self.output_signal.emit(f">>> 正在执行: {cmd_str}")
         self.output_signal.emit(f"    工作目录 (cwd): {cwd_str}")
         if self.input_text:
@@ -67,6 +73,8 @@ class GromacsWorker(QThread):
                 stripped = line.rstrip('\n\r')
                 if stripped:
                     full_output.append(stripped)
+                    # 同时打印到控制台（最可靠的输出）
+                    print(f"[GMX] {stripped}")
                     self.output_signal.emit(stripped)
 
             return_code = process.poll()

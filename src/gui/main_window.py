@@ -6,6 +6,7 @@ from PyQt6.QtGui import QFont
 import os
 import sys
 from datetime import datetime
+import traceback
 
 # 导入 GROMACS 运行器
 from core.runner import GromacsRunner
@@ -113,10 +114,22 @@ class MainWindow(QMainWindow):
         self.right_layout.addWidget(QLabel("全局运行日志:"))
         self.right_layout.addWidget(self.log_output, stretch=1)
         
-        # 测试GROMACS按钮
+        # 测试GROMACS按钮 + 日志控制
+        btn_layout = QHBoxLayout()
+
         self.btn_test = QPushButton("测试 GROMACS 环境")
         self.btn_test.clicked.connect(self.test_gmx)
-        self.right_layout.addWidget(self.btn_test)
+        btn_layout.addWidget(self.btn_test)
+
+        self.btn_clear_log = QPushButton("清空日志")
+        self.btn_clear_log.clicked.connect(self.clear_log)
+        btn_layout.addWidget(self.btn_clear_log)
+
+        self.btn_test_log = QPushButton("测试日志输出 (直接写)")
+        self.btn_test_log.clicked.connect(self.test_log_output)
+        btn_layout.addWidget(self.btn_test_log)
+
+        self.right_layout.addLayout(btn_layout)
 
         # === 新增：一键运行完整流程 + Verbose 开关 ===
         controls_layout = QHBoxLayout()
@@ -176,8 +189,29 @@ class MainWindow(QMainWindow):
         """向日志窗口输出信息（带时间戳）"""
         ts = datetime.now().strftime("%H:%M:%S")
         formatted = f"[{ts}] {message}"
+        # 同时输出到控制台（Spyder / 终端）——这是最可靠的输出方式
+        print(formatted)
+        # 写入 GUI
         self.log_output.append(formatted)
+        # 强制刷新（Spyder + PyQt 经常需要这些）
         self.log_output.verticalScrollBar().setValue(self.log_output.verticalScrollBar().maximum())
+        self.log_output.repaint()
+        try:
+            from PyQt6.QtWidgets import QApplication
+            QApplication.processEvents()
+        except:
+            pass
+
+    def _direct_append(self, text: str):
+        """最直接的写入方式，用于极端调试"""
+        print(f"[DIRECT] {text}")
+        self.log_output.append(text)
+        self.log_output.repaint()
+        try:
+            from PyQt6.QtWidgets import QApplication
+            QApplication.processEvents()
+        except:
+            pass
 
     def log_step_start(self, step_name: str):
         """长任务开始时打印醒目标记 + 时间"""
@@ -210,6 +244,22 @@ class MainWindow(QMainWindow):
             QMessageBox.information(self, "成功", "GROMACS 运行正常！")
         else:
             QMessageBox.critical(self, "错误", "GROMACS 运行失败，请检查路径。")
+
+    def clear_log(self):
+        """清空全局日志窗口"""
+        self.log_output.clear()
+        print("[GUI] 日志窗口已清空")
+
+    def test_log_output(self):
+        """直接测试日志输出是否工作（不依赖任何GROMACS命令）"""
+        print("[GUI] '测试日志输出' 按钮被点击 - 这是控制台输出")
+        self.log("=== 直接测试 #1 ===")
+        self.log("=== 直接测试 #2 - 如果你能看到这两行，说明 log() 正在把内容写进 GUI ===")
+        self.log("=== 直接测试 #3 - 时间戳应该出现 ===")
+        self.log("如果上面三行在 GUI 里完全看不到，请检查：")
+        self.log("  1. Spyder 的 'Console' 面板（看 print 输出）")
+        self.log("  2. 是否有其他窗口遮挡了日志区域")
+        print("[GUI] test_log_output 结束")
 
     def run_full_pipeline(self):
         """一键运行完整流程（Topology → EM → EQ → MD）"""
