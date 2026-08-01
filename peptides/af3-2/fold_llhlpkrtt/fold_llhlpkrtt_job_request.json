@@ -1,0 +1,18 @@
+[{
+ "name": "LLHLPKRTT",
+ "modelSeeds": [
+  "1197034525"
+ ],
+ "sequences": [
+  {
+   "proteinChain": {
+    "sequence": "LLHLPKRTT",
+    "count": 1,
+    "useStructureTemplate": true
+   }
+  }
+ ],
+ "dialect": "alphafoldserver",
+ "version": 3
+}
+]
