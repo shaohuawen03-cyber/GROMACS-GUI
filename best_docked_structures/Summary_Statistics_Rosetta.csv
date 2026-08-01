@@ -1,0 +1,13 @@
+Peptide,Rep1_TotalScore,Rep2_TotalScore,Rep3_TotalScore,Mean_TotalScore,Best_Rep,Best_TotalScore_REU,Best_Interface_I_sc_REU,Best_PDB_File
+alllhrc,-1009.202,-1007.389,-1005.792,-1007.461,Rep1,-1009.202,1.385,alllhrc_best_docked.pdb
+fclhlqlr,-1028.779,-1011.528,-1010.120,-1016.809,Rep1,-1028.779,1.350,fclhlqlr_best_docked.pdb
+fllhttr,-1008.947,-1006.615,-1007.912,-1007.825,Rep1,-1008.947,1.859,fllhttr_best_docked.pdb
+hlltlkkhv,-1013.873,-1014.878,-1012.664,-1013.805,Rep2,-1014.878,1.314,hlltlkkhv_best_docked.pdb
+hlpllhrcc,-1001.316,-1003.284,-1000.989,-1001.863,Rep2,-1003.284,1.375,hlpllhrcc_best_docked.pdb
+hvlllrqca,-1013.558,-1013.349,-1015.369,-1014.092,Rep3,-1015.369,1.892,hvlllrqca_best_docked.pdb
+llhlpkrtt,-1028.379,-1026.261,-1027.374,-1027.338,Rep1,-1028.379,1.401,llhlpkrtt_best_docked.pdb
+llhplrc,-1010.930,-1010.055,-1009.605,-1010.197,Rep1,-1010.930,1.848,llhplrc_best_docked.pdb
+llhplrl,-1015.660,-1014.951,-1024.118,-1018.243,Rep3,-1024.118,1.457,llhplrl_best_docked.pdb
+wllvhlkk,-1009.002,-1009.367,-1009.996,-1009.455,Rep3,-1009.996,1.860,wllvhlkk_best_docked.pdb
+yhhllcrr,-1008.561,-1010.341,-1009.919,-1009.607,Rep2,-1010.341,1.376,yhhllcrr_best_docked.pdb
+ylsllqr,-1024.232,-1023.929,-1026.676,-1024.946,Rep3,-1026.676,1.397,ylsllqr_best_docked.pdb
